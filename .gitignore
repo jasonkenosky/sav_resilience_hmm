@@ -1,0 +1,21 @@
+# OS noise
+.DS_Store
+
+# R / renv
+.Rhistory
+.RData
+.Rproj.user/
+renv/library/
+renv/staging/
+
+# Raw data (never tracked)
+data/data_raw/
+
+# Logs and QC (regenerable)
+outputs/logs/
+outputs/qc/
+
+# Large derived data (track selectively)
+data/data_processed/*.gpkg
+data/data_processed/*.rds
+data/data_processed/*.parquet
