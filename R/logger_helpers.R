@@ -151,26 +151,13 @@ log_packages <- function() {
 # ---- Timing helper ---------------------------------------------------------
 
 with_timing <- function(label, expr) {
-  start_time <- Sys.time()
+  t0 <- Sys.time()
   log_info(glue("Starting: {label}"))
-  
-  result <- tryCatch({
-    if (is.function(expr)) {
-      expr()
-    } else {
-      # capture and eval in parent frame
-      eval(substitute(expr), envir = parent.frame())
-    }
-  }, error = function(e) {
-    log_error(glue("Error in {label}: {e$message}"))
-    stop(e)
-  })
-  
-  elapsed <- round(as.numeric(Sys.time() - start_time, units = "secs"), 2)
+  res <- eval(expr)
+  elapsed <- round(as.numeric(Sys.time() - t0, units = "secs"), 2)
   log_info(glue("Completed: {label} ({elapsed} sec)"))
   log_memory(label)
-  
-  result
+  res   # ← THIS LINE MUST EXIST
 }
 
 # ---- Task map / intent logging ---------------------------------------------
