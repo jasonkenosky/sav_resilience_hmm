@@ -5,9 +5,9 @@
 # Last Updated: <date>
 #
 # Description:
-#   - What ecological question the script addresses
-#   - What data it consumes
-#   - What it produces
+#   - What ecological question the script addresses?
+#   - What are the input data?
+#   - What does the script produce?
 #   - Assumptions and limitations
 # 
 # Inputs:
@@ -27,10 +27,10 @@
 # ==============================================================================
 
 # ------------------------------------------------
-# 0. Housekeeping (clean session friendly)
+# 0. Housekeeping 
 # ------------------------------------------------
-rm(list = ls())
-gc()
+rm(list = ls())  # Only wipes Global Environment. Items may still linger in session. 
+gc()             # Do not rely solely on rm(); periodically refersh the session. 
 
 options(
   scipen = 999,
@@ -48,8 +48,8 @@ suppressPackageStartupMessages({
   library(here)
   library(janitor)
   library(tibble)
-  # library(sf)      # uncomment if needed
-  # library(ggplot2) # uncomment if needed
+  library(sf)      
+  library(ggplot2) 
 })
 
 # ------------------------------------------------
@@ -59,7 +59,7 @@ SCRIPT_ID <- "<nX_YY_verb_noun>"
 
 DIR_ROOT <- here::here()
 
-# Standard project dirs (edit only if your project truly differs)
+# Standard project dirs (edit if your project differs)
 DIR_DATA_RAW       <- file.path(DIR_ROOT, "data_raw")
 DIR_DATA_PROCESSED <- file.path(DIR_ROOT, "data_processed")
 DIR_SCRIPTS        <- file.path(DIR_ROOT, "scripts")
@@ -68,26 +68,25 @@ DIR_OUTPUTS        <- file.path(DIR_ROOT, "outputs")
 DIR_LOGS           <- file.path(DIR_OUTPUTS, "logs")
 DIR_QC             <- file.path(DIR_OUTPUTS, "qc")
 
-# Script-specific outputs (edit these)
+# Script-specific outputs (edit these as needed)
 DIR_OUT_SCRIPT <- file.path(DIR_OUTPUTS, "<topic_or_step_name>")
 fs::dir_create(DIR_OUT_SCRIPT, recurse = TRUE)
 
-# Ensure core dirs exist
+# Ensure core directories exist
 fs::dir_create(DIR_DATA_PROCESSED, recurse = TRUE)
 fs::dir_create(DIR_OUTPUTS, recurse = TRUE)
 fs::dir_create(DIR_LOGS, recurse = TRUE)
 fs::dir_create(DIR_QC, recurse = TRUE)
 
-# Files (edit)
+# Files (edit as necessary)
 FILE_IN  <- file.path(DIR_DATA_PROCESSED, "<your_input>.csv")
 FILE_OUT <- file.path(DIR_DATA_PROCESSED, "<your_output>.csv")
 
 # QC file (one per script run; timestamped by logger helper)
-# We’ll also write a stable "latest" QC file for convenience.
 FILE_QC_LATEST <- file.path(DIR_QC, glue("{SCRIPT_ID}_qc_latest.csv"))
 
 # ------------------------------------------------
-# 3. Logging setup (your helpers only)
+# 3. Logging setup (helpers only)
 # ------------------------------------------------
 # NOTE: This file must exist. If it fails to source, stop immediately.
 FILE_LOG_HELPERS <- here::here("R", "logger_helpers.R")
@@ -115,7 +114,7 @@ if (!file.exists(FILE_IN)) {
 }
 log_info(glue("Input: {FILE_IN}"))
 
-# If you depend on multiple inputs, validate them all here.
+# If multiple inputs are necessary, validate them all here.
 # Example:
 # FILE_IN2 <- file.path(DIR_DATA_PROCESSED, "something_else.gpkg")
 # if (!file.exists(FILE_IN2)) stop("Missing input file: ", FILE_IN2)
@@ -207,7 +206,7 @@ log_info(glue("Wrote: {FILE_OUT}"))
 # ------------------------------------------------
 log_section("QC SUMMARY")
 
-# Add your script-specific checks here.
+# Add any script-specific checks here.
 # Examples:
 # qc <- bind_rows(qc, qc_row("n_missing_key", sum(is.na(dat_out$key_col))))
 # qc <- bind_rows(qc, qc_row("n_distinct_year", n_distinct(dat_out$year)))
