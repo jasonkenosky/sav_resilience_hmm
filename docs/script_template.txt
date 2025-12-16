@@ -1,0 +1,225 @@
+# ==============================================================================
+#Script Title: <Descriptive Name>
+# Purpose: <One-sentence ecological goal>
+# Author: <Your Name>
+# Last Updated: <date>
+#
+# Description:
+#   - What ecological question the script addresses
+#   - What data it consumes
+#   - What it produces
+#   - Assumptions and limitations
+# 
+# Inputs:
+#   Full name of input files including paths and extensions
+#   Example:
+#   data/patch_year/sav_patch_YYYY.gpkg
+#
+# Outputs:
+#   Desired outputs including file names, extensions, and paths
+#   Example:
+#   data_processed/lineages/sav_patch_lineages.gpkg
+#   outputs/tables/lineages/sav_patch_lineages.csv
+#
+# Notes:
+#   - Package versions logged automatically by logger
+#   - Random seeds (if relevant)
+# ==============================================================================
+
+# ------------------------------------------------
+# 0. Housekeeping (clean session friendly)
+# ------------------------------------------------
+rm(list = ls())
+gc()
+
+options(
+  scipen = 999,
+  dplyr.summarise.inform = FALSE
+)
+
+# ------------------------------------------------
+# 1. Load packages
+# ------------------------------------------------
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(readr)
+  library(glue)
+  library(fs)
+  library(here)
+  library(janitor)
+  library(tibble)
+  # library(sf)      # uncomment if needed
+  # library(ggplot2) # uncomment if needed
+})
+
+# ------------------------------------------------
+# 2. Script configuration (directories, parameters)
+# ------------------------------------------------
+SCRIPT_ID <- "<nX_YY_verb_noun>"
+
+DIR_ROOT <- here::here()
+
+# Standard project dirs (edit only if your project truly differs)
+DIR_DATA_RAW       <- file.path(DIR_ROOT, "data_raw")
+DIR_DATA_PROCESSED <- file.path(DIR_ROOT, "data_processed")
+DIR_SCRIPTS        <- file.path(DIR_ROOT, "scripts")
+DIR_R              <- file.path(DIR_ROOT, "R")
+DIR_OUTPUTS        <- file.path(DIR_ROOT, "outputs")
+DIR_LOGS           <- file.path(DIR_OUTPUTS, "logs")
+DIR_QC             <- file.path(DIR_OUTPUTS, "qc")
+
+# Script-specific outputs (edit these)
+DIR_OUT_SCRIPT <- file.path(DIR_OUTPUTS, "<topic_or_step_name>")
+fs::dir_create(DIR_OUT_SCRIPT, recurse = TRUE)
+
+# Ensure core dirs exist
+fs::dir_create(DIR_DATA_PROCESSED, recurse = TRUE)
+fs::dir_create(DIR_OUTPUTS, recurse = TRUE)
+fs::dir_create(DIR_LOGS, recurse = TRUE)
+fs::dir_create(DIR_QC, recurse = TRUE)
+
+# Files (edit)
+FILE_IN  <- file.path(DIR_DATA_PROCESSED, "<your_input>.csv")
+FILE_OUT <- file.path(DIR_DATA_PROCESSED, "<your_output>.csv")
+
+# QC file (one per script run; timestamped by logger helper)
+# We’ll also write a stable "latest" QC file for convenience.
+FILE_QC_LATEST <- file.path(DIR_QC, glue("{SCRIPT_ID}_qc_latest.csv"))
+
+# ------------------------------------------------
+# 3. Logging setup (your helpers only)
+# ------------------------------------------------
+# NOTE: This file must exist. If it fails to source, stop immediately.
+FILE_LOG_HELPERS <- here::here("R", "logger_helpers.R")
+if (!file.exists(FILE_LOG_HELPERS)) {
+  stop("Missing logger helpers: ", FILE_LOG_HELPERS)
+}
+source(FILE_LOG_HELPERS)
+
+log_meta <- start_log(SCRIPT_ID, DIR_LOGS)
+on.exit(stop_log(log_meta$log_con), add = TRUE)
+
+log_section(glue("{SCRIPT_ID} - START"))
+log_info(glue("Project root: {DIR_ROOT}"))
+log_info(glue("Working dir:  {getwd()}"))
+log_info(glue("Log file:     {log_meta$log_file}"))
+
+# ------------------------------------------------
+# 4. Inputs (validate early)
+# ------------------------------------------------
+log_section("INPUTS")
+
+if (!file.exists(FILE_IN)) {
+  log_error(glue("Missing input file: {FILE_IN}"))
+  stop("Missing input file: ", FILE_IN)
+}
+log_info(glue("Input: {FILE_IN}"))
+
+# If you depend on multiple inputs, validate them all here.
+# Example:
+# FILE_IN2 <- file.path(DIR_DATA_PROCESSED, "something_else.gpkg")
+# if (!file.exists(FILE_IN2)) stop("Missing input file: ", FILE_IN2)
+
+# ------------------------------------------------
+# 5. Helpers (script-local only)
+# ------------------------------------------------
+# Keep these small. Anything reusable goes in R/*.R and gets sourced.
+
+safe_write_csv <- function(df, path) {
+  fs::dir_create(dirname(path), recurse = TRUE)
+  readr::write_csv(df, path)
+  invisible(path)
+}
+
+qc_row <- function(
+  metric,
+  value,
+  notes = NA_character_
+) {
+  tibble::tibble(
+    timestamp = Sys.time(),
+    script_id = SCRIPT_ID,
+    metric    = metric,
+    value     = as.character(value),
+    notes     = notes
+  )
+}
+
+write_qc <- function(qc_tbl, file_latest, file_run = NULL) {
+  # stable "latest"
+  safe_write_csv(qc_tbl, file_latest)
+
+  # optional timestamped QC file (recommended)
+  if (!is.null(file_run)) safe_write_csv(qc_tbl, file_run)
+
+  invisible(TRUE)
+}
+
+# Create a timestamped QC file name aligned with log timestamp
+# (reuses the same timestamp string embedded in log filename)
+qc_timestamp <- gsub(glue("{SCRIPT_ID}_|\\.log$"), "", basename(log_meta$log_file))
+FILE_QC_RUN <- file.path(DIR_QC, glue("{SCRIPT_ID}_qc_{qc_timestamp}.csv"))
+
+# ------------------------------------------------
+# 6. Main process
+# ------------------------------------------------
+log_section("PROCESS")
+
+qc <- tibble::tibble()  # accumulates QC rows
+
+# ---- Load -------------------------------------------------------------------
+dat <- with_timing("Read input", quote({
+  readr::read_csv(FILE_IN, show_col_types = FALSE) |>
+    janitor::clean_names()
+}))
+
+log_info(glue("Rows loaded: {nrow(dat)} | Cols: {ncol(dat)}"))
+qc <- dplyr::bind_rows(
+  qc,
+  qc_row("rows_loaded", nrow(dat)),
+  qc_row("cols_loaded", ncol(dat))
+)
+
+# ---- Example transform (replace with your real work) ------------------------
+dat_out <- with_timing("Transform", quote({
+  dat |>
+    dplyr::mutate(.processed = TRUE)
+}))
+
+log_info(glue("Rows output: {nrow(dat_out)}"))
+qc <- dplyr::bind_rows(
+  qc,
+  qc_row("rows_output", nrow(dat_out))
+)
+
+# ------------------------------------------------
+# 7. Write outputs
+# ------------------------------------------------
+log_section("OUTPUTS")
+
+with_timing("Write main output", quote({
+  safe_write_csv(dat_out, FILE_OUT)
+}))
+log_info(glue("Wrote: {FILE_OUT}"))
+
+# ------------------------------------------------
+# 8. QC summary (always write)
+# ------------------------------------------------
+log_section("QC SUMMARY")
+
+# Add your script-specific checks here.
+# Examples:
+# qc <- bind_rows(qc, qc_row("n_missing_key", sum(is.na(dat_out$key_col))))
+# qc <- bind_rows(qc, qc_row("n_distinct_year", n_distinct(dat_out$year)))
+
+with_timing("Write QC files", quote({
+  write_qc(qc, file_latest = FILE_QC_LATEST, file_run = FILE_QC_RUN)
+}))
+log_info(glue("QC latest: {FILE_QC_LATEST}"))
+log_info(glue("QC run:    {FILE_QC_RUN}"))
+
+# ------------------------------------------------
+# 9. Done
+# ------------------------------------------------
+log_section("DONE")
+log_info("Script completed successfully.")
