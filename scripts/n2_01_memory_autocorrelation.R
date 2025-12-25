@@ -21,6 +21,9 @@
 #   outputs/logs/n2_01_memory_autocorrelation_<timestamp>.log
 # ==============================================================================
 
+# ------------------------------------------------
+# 0. Housekeeping 
+# ------------------------------------------------
 rm(list = ls())
 gc()
 
@@ -77,7 +80,7 @@ PARAMS <- list(
 )
 
 # ------------------------------------------------
-# 3. Logging setup (your helpers)
+# 3. Logging 
 # ------------------------------------------------
 FILE_LOG_HELPERS <- here::here("R", "logger_helpers.R")
 if (!file.exists(FILE_LOG_HELPERS)) stop("Missing logger helpers: ", FILE_LOG_HELPERS)
@@ -105,7 +108,41 @@ log_params(list(
 ))
 
 # ------------------------------------------------
-# 4. Helpers (script-local)
+# 4. Input validation
+# ------------------------------------------------
+log_section("READ + VALIDATE INPUT")
+
+if (!file.exists(FILE_IN_LONG)) {
+  log_error(glue("Missing input file: {FILE_IN_LONG}"))
+  stop("Missing input file: ", FILE_IN_LONG)
+}
+
+dat <- with_timing("Read long table", quote({
+  readr::read_csv(FILE_IN_LONG, show_col_types = FALSE) |>
+    janitor::clean_names()
+}))
+
+check_required_cols(dat, PARAMS$required_cols, context = "Stage 0 long table")
+assert_unique_key(dat, key = c("lineage_id", "year"), context = "Stage 0 long table")
+
+# enforce types
+dat <- dat %>%
+  dplyr::mutate(
+    lineage_id = suppressWarnings(as.integer(lineage_id)),
+    year       = suppressWarnings(as.integer(year)),
+    state_bin7 = as.character(state_bin7)
+  )
+
+# hard stops
+stopifnot(!any(is.na(dat$lineage_id)))
+stopifnot(!any(is.na(dat$year)))
+stopifnot(!any(is.na(dat$state_bin7)))
+
+log_info(glue("Rows: {nrow(dat)} | Lineages: {dplyr::n_distinct(dat$lineage_id)} | Years: {dplyr::n_distinct(dat$year)}"))
+log_info(glue("Year span: {min(dat$year)}-{max(dat$year)}"))
+
+# ------------------------------------------------
+# 5. Helpers (script-local)
 # ------------------------------------------------
 safe_write_csv <- function(df, path) {
   fs::dir_create(dirname(path), recurse = TRUE)
@@ -198,41 +235,7 @@ compute_lag1_same <- function(df_one, require_consecutive = TRUE) {
 }
 
 # ------------------------------------------------
-# 5. Read input + validate
-# ------------------------------------------------
-log_section("READ + VALIDATE INPUT")
-
-if (!file.exists(FILE_IN_LONG)) {
-  log_error(glue("Missing input file: {FILE_IN_LONG}"))
-  stop("Missing input file: ", FILE_IN_LONG)
-}
-
-dat <- with_timing("Read long table", quote({
-  readr::read_csv(FILE_IN_LONG, show_col_types = FALSE) |>
-    janitor::clean_names()
-}))
-
-check_required_cols(dat, PARAMS$required_cols, context = "Stage 0 long table")
-assert_unique_key(dat, key = c("lineage_id", "year"), context = "Stage 0 long table")
-
-# enforce types
-dat <- dat %>%
-  dplyr::mutate(
-    lineage_id = suppressWarnings(as.integer(lineage_id)),
-    year       = suppressWarnings(as.integer(year)),
-    state_bin7 = as.character(state_bin7)
-  )
-
-# hard stops
-stopifnot(!any(is.na(dat$lineage_id)))
-stopifnot(!any(is.na(dat$year)))
-stopifnot(!any(is.na(dat$state_bin7)))
-
-log_info(glue("Rows: {nrow(dat)} | Lineages: {dplyr::n_distinct(dat$lineage_id)} | Years: {dplyr::n_distinct(dat$year)}"))
-log_info(glue("Year span: {min(dat$year)}-{max(dat$year)}"))
-
-# ------------------------------------------------
-# 6. Compute memory metrics
+# 6. Main process: Compute memory metrics
 # ------------------------------------------------
 log_section("COMPUTE MEMORY METRICS")
 
@@ -261,7 +264,23 @@ metrics <- with_timing("Per-lineage runs + lag-1 dependence", quote({
 log_info(glue("Metrics rows: {nrow(metrics)} (should equal n_lineages)"))
 
 # ------------------------------------------------
-# 7. QC summary
+# 7. Write outputs
+# ------------------------------------------------
+log_section("WRITE OUTPUTS")
+
+with_timing("Write metrics + QC", quote({
+  safe_write_csv(metrics, FILE_OUT_LATEST)
+  safe_write_csv(metrics, FILE_OUT_RUN)
+  write_qc(qc, FILE_QC_LATEST, FILE_QC_RUN)
+}))
+
+log_info(glue("Metrics latest: {FILE_OUT_LATEST}"))
+log_info(glue("Metrics run:    {FILE_OUT_RUN}"))
+log_info(glue("QC latest:      {FILE_QC_LATEST}"))
+log_info(glue("QC run:         {FILE_QC_RUN}"))
+
+# ------------------------------------------------
+# 8. QC summary
 # ------------------------------------------------
 log_section("QC SUMMARY")
 
@@ -279,22 +298,6 @@ qc <- dplyr::bind_rows(
   qc_row("median_run_length_median", stats::median(metrics$median_run_length, na.rm = TRUE)),
   qc_row("max_run_length_max", max(metrics$max_run_length, na.rm = TRUE))
 )
-
-# ------------------------------------------------
-# 8. Write outputs
-# ------------------------------------------------
-log_section("WRITE OUTPUTS")
-
-with_timing("Write metrics + QC", quote({
-  safe_write_csv(metrics, FILE_OUT_LATEST)
-  safe_write_csv(metrics, FILE_OUT_RUN)
-  write_qc(qc, FILE_QC_LATEST, FILE_QC_RUN)
-}))
-
-log_info(glue("Metrics latest: {FILE_OUT_LATEST}"))
-log_info(glue("Metrics run:    {FILE_OUT_RUN}"))
-log_info(glue("QC latest:      {FILE_QC_LATEST}"))
-log_info(glue("QC run:         {FILE_QC_RUN}"))
 
 # ------------------------------------------------
 # 9. Done
